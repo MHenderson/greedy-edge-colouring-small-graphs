@@ -1,0 +1,67 @@
+ORDER_MIN=2
+ORDER_MAX=9
+
+; Let X be the set of all non-isomorphic, connected graphs of order at least
+; ORDER_MIN and at most ORDER_MAX
+
+; Count the total number of colours used by greedy edge-colourings of all
+; graphs in X.
+count_colours()
+  for j in `seq $ORDER_MIN $ORDER_MAX`
+  do
+    echo -e $j'\t' `geng -qc $j |\
+                    edge_colouring.py |\
+                    paste -s -d"+" |\
+                    bc` >> $OUTPUT
+  done
+
+; Compute the maximum degrees of all graphs in X.
+compute_degrees()
+  for j in `seq $ORDER_MIN $ORDER_MAX`
+  do
+    echo -e $j'\t' `geng -qc $j |\
+                    listg -y |\
+                    gvpr -fmaxdeg |\
+                    sed -n 's/max degree = \([0-9]*\).*/\1/p' |\
+                    paste -s -d"+" |\
+                    bc` >> $OUTPUT
+  done
+
+; Joins input files by columns with tab separation.
+join_inputs_tsv()
+  join -t$'\t' $INPUTS >> $OUTPUT
+
+; Adds a third column of ratios of column 2 to column 3.
+compute_ratios()
+  cat $INPUT |\
+  awk -F$'\t' '{printf("%s\t%s\n", $1, $2/$3)}' |\
+  join -t$'\t' $INPUT - >> $OUTPUT
+
+; Adds a header row.
+create_table()
+  cat $INPUTS |\
+  sed -e '1i 1\t2\t3\t4' >> $OUTPUT
+
+; Plot the data using matplotlib.
+plot_svg()
+  import matplotlib.pyplot as plt
+  with open('$[INPUT]') as f:
+    data = f.read()
+  data = data.split('\n')
+  x = [int(row.split('\t')[0]) for row in data[1:-1]]
+  y = [float(row.split('\t')[3]) for row in data[1:-1]]
+  fig = plt.figure()
+  ax1 = fig.add_subplot(111)
+  ax1.axis([$[ORDER_MIN], $[ORDER_MAX] + 1, 0, 2])
+  ax1.set_title("Greedy Edge-Colouring of Small Graphs")    
+  ax1.set_xlabel('Order')
+  ax1.set_ylabel('Colours/Maximum Degree')
+  ax1.bar(x, y)
+  plt.savefig('$[OUTPUT]', format = 'svg')
+
+results/colours.txt <- [-timecheck method:count_colours]
+results/degrees.txt <- [-timecheck method:compute_degrees]
+results/join.txt <- results/colours.txt, results/degrees.txt [method:join_inputs_tsv]
+results/ratios.txt <- results/join.txt [method:compute_ratios]
+results/data.tsv <- results/ratios.txt [method:create_table]
+results/plot.svg <- results/data.tsv [python method:plot_svg]
